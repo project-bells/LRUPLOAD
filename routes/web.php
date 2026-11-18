@@ -75,12 +75,13 @@ Route::middleware(['auth', 'active'])->group(function (): void {
             ->middleware('permission:documents.create')
             ->name('documents.create');
         Route::post('/documents/stage', [DocumentController::class, 'stage'])
-            ->middleware('permission:documents.create')
+            ->middleware(['permission:documents.create', 'throttle:document-upload'])
             ->name('documents.stage');
         Route::get('/documents/review/{token}', [DocumentController::class, 'review'])
             ->middleware('permission:documents.create')
             ->name('documents.review');
         Route::get('/documents/staged/{token}/stream', [DocumentController::class, 'streamStaged'])
+            ->middleware('permission:documents.create|documents.create_revision')
             ->name('documents.staged.stream');
         Route::post('/documents/confirm', [DocumentController::class, 'confirm'])
             ->middleware('permission:documents.create')
@@ -123,7 +124,7 @@ Route::middleware(['auth', 'active'])->group(function (): void {
             ->middleware('permission:documents.create_revision')
             ->name('documents.revisions.create');
         Route::post('/documents/{document}/revisions/stage', [DocumentRevisionController::class, 'stage'])
-            ->middleware('permission:documents.create_revision')
+            ->middleware(['permission:documents.create_revision', 'throttle:document-upload'])
             ->name('documents.revisions.stage');
         Route::get('/documents/{document}/revisions/review/{token}', [DocumentRevisionController::class, 'review'])
             ->middleware('permission:documents.create_revision')
@@ -155,10 +156,13 @@ Route::middleware(['auth', 'active'])->group(function (): void {
             ->name('documents.soft-delete');
     });
 
-    // Audit Log (Read-Only)
+    // Audit Log (Read-Only; HN search uses POST to avoid exposing plaintext HN in GET URLs)
     Route::get('/audit-logs', [AuditLogController::class, 'index'])
         ->middleware(['nocache', 'permission:audit.view_department|audit.view_all'])
         ->name('audit-logs.index');
+    Route::post('/audit-logs/search-hn', [AuditLogController::class, 'searchByHn'])
+        ->middleware(['nocache', 'permission:audit.view_department|audit.view_all', 'throttle:patient-lookup'])
+        ->name('audit-logs.search-hn');
 
     // Admin Management Module
     Route::prefix('admin')->name('admin.')->middleware('nocache')->group(function (): void {

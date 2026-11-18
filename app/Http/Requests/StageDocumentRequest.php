@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests;
 
+use App\Services\FileStorageService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -19,7 +20,7 @@ class StageDocumentRequest extends FormRequest
      */
     public function rules(): array
     {
-        $maxKb = (int) config('documents.max_file_size_kb', 20480);
+        $maxKb = app(FileStorageService::class)->maxFileSizeKb();
 
         return [
             'patient_id' => ['required', 'integer', 'exists:patients,id'],

@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 
 class DocumentFileController extends Controller
 {
@@ -84,9 +85,12 @@ class DocumentFileController extends Controller
             departmentId: $document->department_id,
         );
 
+        $safeName = basename($storedFile->original_name);
+        $asciiFallback = preg_replace('/[^\x20-\x7E]/', '_', $safeName) ?: ('document.' . $storedFile->extension);
+
         return response()->file($absPath, [
             'Content-Type' => $storedFile->mime_type,
-            'Content-Disposition' => 'inline; filename="' . basename($storedFile->original_name) . '"',
+            'Content-Disposition' => HeaderUtils::makeDisposition(HeaderUtils::DISPOSITION_INLINE, $safeName, $asciiFallback),
             'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0, private',
             'Pragma' => 'no-cache',
             'X-Content-Type-Options' => 'nosniff',
@@ -124,8 +128,12 @@ class DocumentFileController extends Controller
             departmentId: $document->department_id,
         );
 
-        return response()->download($absPath, basename($storedFile->original_name), [
+        $safeName = basename($storedFile->original_name);
+        $asciiFallback = preg_replace('/[^\x20-\x7E]/', '_', $safeName) ?: ('document.' . $storedFile->extension);
+
+        return response()->download($absPath, $safeName, [
             'Content-Type' => $storedFile->mime_type,
+            'Content-Disposition' => HeaderUtils::makeDisposition(HeaderUtils::DISPOSITION_ATTACHMENT, $safeName, $asciiFallback),
             'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0, private',
             'X-Content-Type-Options' => 'nosniff',
         ]);

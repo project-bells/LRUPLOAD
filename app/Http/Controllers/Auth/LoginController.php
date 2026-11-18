@@ -34,32 +34,22 @@ class LoginController extends Controller
         $field = filter_var($login, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
 
         $candidate = User::query()->where($field, $login)->first();
-        if ($candidate !== null && ! $candidate->is_active) {
-            $this->auditLog->record(
-                action: 'login_failed',
-                user: $candidate,
-                outcome: 'denied',
-                afterData: ['reason' => 'account_inactive'],
-                request: $request,
-            );
 
-            return back()
-                ->withInput($request->only('login'))
-                ->withErrors(['login' => 'บัญชีผู้ใช้งานถูกระงับ กรุณาติดต่อผู้ดูแลระบบ']);
-        }
-
+        // Always perform attempt & return a uniform error message to prevent user account enumeration (SEC-M-01)
         if (! Auth::attempt([$field => $login, 'password' => $password, 'is_active' => true], $remember)) {
+            $reason = ($candidate !== null && ! $candidate->is_active) ? 'account_inactive' : 'invalid_credentials';
+
             $this->auditLog->record(
                 action: 'login_failed',
                 user: $candidate,
-                outcome: 'failed',
-                afterData: ['login_field' => $field],
+                outcome: $reason === 'account_inactive' ? 'denied' : 'failed',
+                afterData: ['login_field' => $field, 'reason' => $reason],
                 request: $request,
             );
 
             return back()
                 ->withInput($request->only('login'))
-                ->withErrors(['login' => 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง']);
+                ->withErrors(['login' => 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง หรือบัญชีไม่สามารถใช้งานได้']);
         }
 
         // Prevent session fixation

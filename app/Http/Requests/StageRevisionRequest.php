@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests;
 
+use App\Services\FileStorageService;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StageRevisionRequest extends FormRequest
@@ -18,7 +19,7 @@ class StageRevisionRequest extends FormRequest
      */
     public function rules(): array
     {
-        $maxKb = (int) config('documents.max_file_size_kb', 20480);
+        $maxKb = app(FileStorageService::class)->maxFileSizeKb();
 
         return [
             'change_reason' => ['required', 'string', 'min:5', 'max:1000'],

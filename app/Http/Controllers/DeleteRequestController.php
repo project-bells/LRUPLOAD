@@ -27,17 +27,25 @@ class DeleteRequestController extends Controller
     {
         $this->authorize('viewAny', DeleteRequest::class);
 
+        /** @var User $user */
+        $user = $request->user();
         $status = $request->string('status', 'pending')->toString();
         $query = DeleteRequest::query()
             ->with(['document.documentType', 'document.patients', 'requester', 'reviewer'])
             ->latest();
+
+        // Scope delete requests to user's own department unless holding system-wide oversight (SEC-H-01)
+        if (! $user->hasPermission('audit.view_all') && ! $user->hasRole('administrator') && $user->department_id !== null) {
+            $deptId = $user->department_id;
+            $query->whereHas('document', static fn ($q) => $q->withTrashed()->where('department_id', $deptId));
+        }
 
         if (in_array($status, ['pending', 'approved', 'rejected', 'cancelled'], true)) {
             $query->where('status', $status);
         }
 
         return view('delete-requests.index', [
-            'deleteRequests' => $query->paginate(15)->withQueryString(),
+            'deleteRequests' => $query->paginate(20)->withQueryString(),
             'selectedStatus' => $status,
         ]);
     }

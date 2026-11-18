@@ -21,17 +21,25 @@ class SystemSettingController extends Controller
     public function index(): View
     {
         $settings = SystemSetting::query()->get()->keyBy('key');
-        $hasPasswordSet = ($settings->get('patient_db_password')?->value_encrypted !== null && $settings->get('patient_db_password')?->value_encrypted !== '')
-            || (string) config('database.connections.patient_sqlsrv.password', '') !== '';
+
+        // Option 1 (SEC-H-05): SQL Server 2014 connection is strictly managed via server .env / Secret Manager.
+        // Display only non-sensitive operational status flags (never expose IP, hostname, username, or password).
+        $conn = (array) config('database.connections.patient_sqlsrv', []);
 
         return view('admin.settings.index', [
             'settings' => $settings,
-            'hasPasswordSet' => $hasPasswordSet,
-            'envSummary' => [
-                'patient_db_enabled' => (bool) config('patient_lookup.enabled', false),
-                'patient_db_connection' => (string) config('database.connections.patient_sqlsrv.driver', 'sqlsrv'),
-                'patient_db_encrypt' => (string) config('database.connections.patient_sqlsrv.encrypt', 'yes'),
-                'patient_db_trust_cert' => (string) config('database.connections.patient_sqlsrv.trust_server_certificate', 'false'),
+            'hisEnvStatus' => [
+                'enabled' => (bool) config('patient_lookup.enabled', false),
+                'driver' => (string) ($conn['driver'] ?? 'sqlsrv'),
+                'port' => (string) ($conn['port'] ?? '1433'),
+                'encrypt' => (string) ($conn['encrypt'] ?? 'yes'),
+                'trust_cert' => (string) ($conn['trust_server_certificate'] ?? 'false'),
+                'login_timeout' => (int) ($conn['login_timeout'] ?? 5),
+                'query_timeout' => (int) config('patient_lookup.query_timeout', 10),
+                'host_configured' => trim((string) ($conn['host'] ?? '')) !== '',
+                'database_configured' => trim((string) ($conn['database'] ?? '')) !== '',
+                'credentials_configured' => trim((string) ($conn['username'] ?? '')) !== '' && trim((string) ($conn['password'] ?? '')) !== '',
+                'pdo_sqlsrv_loaded' => extension_loaded('pdo_sqlsrv'),
             ],
         ]);
     }
@@ -39,89 +47,55 @@ class SystemSettingController extends Controller
     public function update(Request $request): RedirectResponse
     {
         $validated = $request->validate([
+            'current_password' => ['required', 'current_password'],
             'permanent_delete_enabled' => ['nullable', 'boolean'],
             'soft_delete_retention_days' => ['required', 'integer', 'min:0', 'max:3650'],
             'max_file_size_kb' => ['required', 'integer', 'min:512', 'max:102400'],
-            'patient_db_enabled' => ['nullable', 'boolean'],
-            'patient_db_host' => ['nullable', 'string', 'max:150'],
-            'patient_db_port' => ['required', 'integer', 'min:1', 'max:65535'],
-            'patient_db_database' => ['nullable', 'string', 'max:120'],
-            'patient_db_username' => ['nullable', 'string', 'max:120'],
-            'patient_db_password' => ['nullable', 'string', 'max:255'],
-            'patient_db_encrypt' => ['nullable', 'boolean'],
-            'patient_db_trust_server_certificate' => ['nullable', 'boolean'],
-            'patient_db_login_timeout' => ['required', 'integer', 'min:1', 'max:60'],
-            'patient_db_query_timeout' => ['required', 'integer', 'min:1', 'max:120'],
+        ], [
+            'current_password.required' => 'กรุณากรอกรหัสผ่านปัจจุบันเพื่อยืนยันการเปลี่ยนแปลงตั้งค่าระบบ',
+            'current_password.current_password' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง',
         ]);
 
-        $plainPairs = [
-            'security' => [
-                'permanent_delete_enabled' => $request->boolean('permanent_delete_enabled') ? '1' : '0',
-                'soft_delete_retention_days' => (string) ((int) $validated['soft_delete_retention_days']),
-                'max_file_size_kb' => (string) $validated['max_file_size_kb'],
-            ],
-            'patient_sqlsrv' => [
-                'patient_db_enabled' => $request->boolean('patient_db_enabled') ? '1' : '0',
-                'patient_db_host' => (string) ($validated['patient_db_host'] ?? ''),
-                'patient_db_port' => (string) $validated['patient_db_port'],
-                'patient_db_database' => (string) ($validated['patient_db_database'] ?? ''),
-                'patient_db_username' => (string) ($validated['patient_db_username'] ?? ''),
-                'patient_db_encrypt' => $request->boolean('patient_db_encrypt') ? '1' : '0',
-                'patient_db_trust_server_certificate' => $request->boolean('patient_db_trust_server_certificate') ? '1' : '0',
-                'patient_db_login_timeout' => (string) $validated['patient_db_login_timeout'],
-                'patient_db_query_timeout' => (string) $validated['patient_db_query_timeout'],
-            ],
+        $before = [
+            'permanent_delete_enabled' => SystemSetting::query()->where('key', 'permanent_delete_enabled')->value('value_plain'),
+            'soft_delete_retention_days' => SystemSetting::query()->where('key', 'soft_delete_retention_days')->value('value_plain'),
+            'max_file_size_kb' => SystemSetting::query()->where('key', 'max_file_size_kb')->value('value_plain'),
+        ];
+
+        $pairs = [
+            'permanent_delete_enabled' => $request->boolean('permanent_delete_enabled') ? '1' : '0',
+            'soft_delete_retention_days' => (string) ((int) $validated['soft_delete_retention_days']),
+            'max_file_size_kb' => (string) ((int) $validated['max_file_size_kb']),
         ];
 
         $userId = $request->user()?->id;
 
-        foreach ($plainPairs as $group => $items) {
-            foreach ($items as $key => $val) {
-                SystemSetting::query()->updateOrCreate(
-                    ['key' => $key],
-                    [
-                        'group_name' => $group,
-                        'value_plain' => $val,
-                        'is_secret' => false,
-                        'updated_by' => $userId,
-                    ]
-                );
-            }
-        }
-
-        // Update encrypted SQL Server password ONLY when a new non-empty value is supplied (never expose existing password)
-        $passwordUpdated = false;
-        if (! empty($validated['patient_db_password'])) {
+        foreach ($pairs as $key => $val) {
             SystemSetting::query()->updateOrCreate(
-                ['key' => 'patient_db_password'],
+                ['key' => $key],
                 [
-                    'group_name' => 'patient_sqlsrv',
-                    'value_encrypted' => (string) $validated['patient_db_password'],
-                    'value_plain' => null,
-                    'is_secret' => true,
+                    'group_name' => 'security',
+                    'value_plain' => $val,
+                    'is_secret' => false,
                     'updated_by' => $userId,
                 ]
             );
-            $passwordUpdated = true;
         }
 
         $this->auditLog->record(
             action: 'change_setting',
             user: $request->user(),
             outcome: 'success',
+            beforeData: $before,
             afterData: [
                 'permanent_delete_enabled' => $request->boolean('permanent_delete_enabled'),
                 'soft_delete_retention_days' => (int) $validated['soft_delete_retention_days'],
                 'max_file_size_kb' => (int) $validated['max_file_size_kb'],
-                'patient_db_enabled' => $request->boolean('patient_db_enabled'),
-                'patient_db_encrypt' => $request->boolean('patient_db_encrypt'),
-                'patient_db_trust_server_certificate' => $request->boolean('patient_db_trust_server_certificate'),
-                'patient_db_password_updated' => $passwordUpdated,
             ],
             request: $request,
         );
 
         return redirect()->route('admin.settings.index')
-            ->with('status', 'บันทึกการตั้งค่าระบบเรียบร้อยแล้ว (รหัสผ่านเดิมจะไม่ถูกเปิดเผย)');
+            ->with('status', 'บันทึกการตั้งค่าระบบเรียบร้อยแล้ว (มีผลบังคับใช้ทันที)');
     }
 }

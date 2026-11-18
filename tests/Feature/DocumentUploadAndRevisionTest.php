@@ -218,6 +218,8 @@ class DocumentUploadAndRevisionTest extends TestCase
         ]);
         $stagedDoc = session('staged_documents');
         $docToken = (string) array_key_first($stagedDoc);
+        // Visit Review Before Save (enforced by SEC-H-03)
+        $this->actingAs($author)->get(route('documents.review', ['token' => $docToken]))->assertOk();
         $this->actingAs($author)->post(route('documents.confirm'), [
             'staging_token' => $docToken,
             'idempotency_token' => $stagedDoc[$docToken]['idempotency_token'],
@@ -237,6 +239,8 @@ class DocumentUploadAndRevisionTest extends TestCase
         $stagedRev = session('staged_revisions');
         $revToken = (string) array_key_first($stagedRev);
 
+        // Visit Revision Review Before Save (enforced by SEC-H-03)
+        $this->actingAs($author)->get(route('documents.revisions.review', ['document' => $document->id, 'token' => $revToken]))->assertOk();
         $this->actingAs($author)->post(route('documents.revisions.confirm', $document), [
             'staging_token' => $revToken,
             'idempotency_token' => $stagedRev[$revToken]['idempotency_token'],

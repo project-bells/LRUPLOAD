@@ -20,10 +20,14 @@ class DashboardController extends Controller
 
         $docQuery = Document::query()->with(['documentType', 'currentRevision.storedFile', 'patients', 'creator']);
         $trashedQuery = Document::onlyTrashed();
+        $pendingDeleteQuery = DeleteRequest::query()
+            ->where('status', DeleteRequestStatus::Pending->value);
 
         if (! $user->hasPermission('audit.view_all') && ! $user->hasRole('administrator') && $user->department_id !== null) {
-            $docQuery->where('department_id', $user->department_id);
-            $trashedQuery->where('department_id', $user->department_id);
+            $deptId = $user->department_id;
+            $docQuery->where('department_id', $deptId);
+            $trashedQuery->where('department_id', $deptId);
+            $pendingDeleteQuery->whereHas('document', static fn ($q) => $q->withTrashed()->where('department_id', $deptId));
         }
 
         $activeDocuments = (clone $docQuery)->count();
@@ -33,9 +37,7 @@ class DashboardController extends Controller
             'active_documents' => $activeDocuments,
             'today_documents' => (clone $docQuery)->whereDate('created_at', today())->count(),
             'total_documents' => $activeDocuments + $trashedDocuments,
-            'pending_delete_requests' => DeleteRequest::query()
-                ->where('status', DeleteRequestStatus::Pending->value)
-                ->count(),
+            'pending_delete_requests' => $pendingDeleteQuery->count(),
             'trashed_documents' => $trashedDocuments,
         ];
 

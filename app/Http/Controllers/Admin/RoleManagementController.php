@@ -30,8 +30,12 @@ class RoleManagementController extends Controller
     public function updatePermissions(Request $request, Role $role): RedirectResponse
     {
         $validated = $request->validate([
+            'current_password' => ['required', 'current_password'],
             'permission_ids' => ['nullable', 'array'],
             'permission_ids.*' => ['integer', 'exists:permissions,id'],
+        ], [
+            'current_password.required' => 'กรุณากรอกรหัสผ่านปัจจุบันเพื่อยืนยันการเปลี่ยนแปลงสิทธิ์',
+            'current_password.current_password' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง',
         ]);
 
         $before = $role->permissions()->pluck('permissions.name')->all();

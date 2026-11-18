@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Contracts\FileScannerInterface;
 use App\Models\StoredFile;
+use App\Models\SystemSetting;
 use App\Models\User;
 use finfo;
 use Illuminate\Http\UploadedFile;
@@ -16,9 +17,30 @@ use RuntimeException;
 
 class FileStorageService
 {
+    private const MAX_IMAGE_WIDTH = 10000;
+    private const MAX_IMAGE_HEIGHT = 10000;
+    private const MAX_IMAGE_PIXELS = 40000000;
+
     public function __construct(
         private readonly FileScannerInterface $scanner,
     ) {
+    }
+
+    /**
+     * Resolve effective max file size (KB) from SystemSetting (runtime) with config fallback.
+     */
+    public function maxFileSizeKb(): int
+    {
+        try {
+            $setting = SystemSetting::query()->where('key', 'max_file_size_kb')->first();
+            if ($setting !== null && is_numeric($setting->value_plain)) {
+                return max(512, min(102400, (int) $setting->value_plain));
+            }
+        } catch (\Throwable) {
+            // Fallback if table unavailable
+        }
+
+        return (int) config('documents.max_file_size_kb', 20480);
     }
 
     /**
@@ -29,7 +51,14 @@ class FileStorageService
      */
     public function stageUpload(UploadedFile $file, User $uploader): array
     {
-        $originalName = $this->sanitizeOriginalFilename($file->getClientOriginalName());
+        $rawOriginalName = $file->getClientOriginalName();
+        if (str_contains($rawOriginalName, "\0") || str_contains($rawOriginalName, '..')) {
+            throw ValidationException::withMessages([
+                'file' => 'ชื่อไฟล์ไม่ปลอดภัย กรุณาเปลี่ยนชื่อไฟล์และอัปโหลดใหม่อีกครั้ง',
+            ]);
+        }
+
+        $originalName = $this->sanitizeOriginalFilename($rawOriginalName);
         $extension = strtolower($file->getClientOriginalExtension());
         $allowedExtensions = (array) config('documents.allowed_extensions', ['pdf', 'jpg', 'jpeg', 'png', 'docx', 'xlsx']);
 
@@ -46,7 +75,7 @@ class FileStorageService
             ]);
         }
 
-        $maxKb = (int) config('documents.max_file_size_kb', 20480);
+        $maxKb = $this->maxFileSizeKb();
         $fileSize = (int) ($file->getSize() ?? 0);
         if ($fileSize <= 0 || $fileSize > ($maxKb * 1024)) {
             throw ValidationException::withMessages([
@@ -79,6 +108,25 @@ class FileStorageService
             throw ValidationException::withMessages([
                 'file' => 'ตรวจพบโครงสร้างไฟล์ที่ไม่ได้รับอนุญาต (Executable/Script) ระบบปฏิเสธการอัปโหลด',
             ]);
+        }
+
+        // Guard against image decompression bombs
+        if (in_array($extension, ['jpg', 'jpeg', 'png'], true)) {
+            $imgInfo = @getimagesize($realPath);
+            if ($imgInfo === false || $imgInfo[0] <= 0 || $imgInfo[1] <= 0) {
+                throw ValidationException::withMessages([
+                    'file' => 'ไฟล์รูปภาพเสียหายหรือไม่ถูกต้อง',
+                ]);
+            }
+            if (
+                $imgInfo[0] > self::MAX_IMAGE_WIDTH ||
+                $imgInfo[1] > self::MAX_IMAGE_HEIGHT ||
+                ($imgInfo[0] * $imgInfo[1]) > self::MAX_IMAGE_PIXELS
+            ) {
+                throw ValidationException::withMessages([
+                    'file' => 'ขนาดความละเอียดของรูปภาพสูงเกินกำหนด กรุณาลดขนาดภาพก่อนอัปโหลด',
+                ]);
+            }
         }
 
         // Optional antivirus hook
@@ -263,9 +311,11 @@ class FileStorageService
     private function sanitizeOriginalFilename(string $filename): string
     {
         $base = basename(str_replace('\\', '/', $filename));
-        $base = preg_replace('/[\x00-\x1F\x7F]/', '', $base) ?? 'document';
+        // Strip control bytes, quotes, semicolons, and path separators to prevent header parameter injection
+        $base = preg_replace('/[\x00-\x1F\x7F"\';\/\\\\]+/', '_', $base) ?? 'document';
+        $base = trim($base, " ._");
 
-        return Str::limit(trim($base) !== '' ? trim($base) : 'document', 200, '');
+        return Str::limit($base !== '' ? $base : 'document', 200, '');
     }
 
     private function hasDangerousDoubleExtension(string $filename): bool

@@ -20,6 +20,11 @@ class DeleteRequestPolicy
             return false;
         }
 
+        // Separation of duties (SEC-H-02): requester cannot approve/review their own delete request
+        if ((int) $deleteRequest->requested_by === (int) $user->id) {
+            return false;
+        }
+
         if ($user->hasPermission('audit.view_all') || $user->hasRole('administrator')) {
             return true;
         }

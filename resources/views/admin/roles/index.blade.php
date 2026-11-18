@@ -24,9 +24,12 @@
                         <h3 class="text-base font-bold text-[#004F85]">{{ $role->display_name_th }}</h3>
                         <p class="text-xs text-slate-600">{{ $role->description }} • ผู้ใช้งานในบทบาทนี้: {{ $role->users_count }} คน</p>
                     </div>
-                    <button type="submit" class="aikchol-btn-primary px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer">
-                        บันทึกสิทธิ์ของ {{ $role->display_name_en }}
-                    </button>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <input type="password" name="current_password" required autocomplete="current-password" placeholder="รหัสผ่าน Admin เพื่อยืนยัน *" class="aikchol-input text-xs !w-52">
+                        <button type="submit" class="aikchol-btn-primary px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer">
+                            บันทึกสิทธิ์ของ {{ $role->display_name_en }}
+                        </button>
+                    </div>
                 </div>
 
                 <div class="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">

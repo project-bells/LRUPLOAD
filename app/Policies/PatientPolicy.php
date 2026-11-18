@@ -21,7 +21,24 @@ class PatientPolicy
 
     public function view(User $user, Patient $patient): bool
     {
-        return $user->hasPermission('patients.view');
+        if (! $user->hasPermission('patients.view')) {
+            return false;
+        }
+
+        if ($user->hasPermission('audit.view_all') || $user->hasRole('administrator') || $user->department_id === null) {
+            return true;
+        }
+
+        // Allow newly selected patients (0 documents yet) or patients having at least one document in user's department
+        $hasAnyDocuments = $patient->documents()->withTrashed()->exists();
+        if (! $hasAnyDocuments) {
+            return true;
+        }
+
+        return $patient->documents()
+            ->withTrashed()
+            ->where('department_id', $user->department_id)
+            ->exists();
     }
 
     public function linkRelationship(User $user): bool

@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'ตั้งค่าระบบและ SQL Server 2014')
+@section('title', 'ตั้งค่าระบบและสถานะ SQL Server 2014')
 
 @section('breadcrumbs')
     <span>/</span>
@@ -10,27 +10,27 @@
 @section('content')
 <div class="max-w-4xl space-y-6">
     <div>
-        <h2 class="text-xl font-bold text-[#004F85]">ตั้งค่าระบบและการเชื่อมต่อ SQL Server 2014 (Read-Only)</h2>
+        <h2 class="text-xl font-bold text-[#004F85]">ตั้งค่าระบบและสถานะการเชื่อมต่อ SQL Server 2014</h2>
         <p class="text-xs text-slate-500 mt-0.5">
-            รหัสผ่าน SQL Server ถูกเข้ารหัสก่อนจัดเก็บและจะไม่ถูกแสดงกลับบนหน้าจอ • ค่าเริ่มต้นบังคับ TLS Encrypt=true และ TrustServerCertificate=false
+            การตั้งค่าเอกสารมีผลบังคับใช้ทันที • ค่าเชื่อมต่อ SQL Server 2014 จัดการผ่านไฟล์ <code class="font-mono">.env</code> บนเซิร์ฟเวอร์เท่านั้นเพื่อไม่เก็บ Credential ซ้ำซ้อนลง MySQL
         </p>
     </div>
 
+    <!-- Editable Runtime Document & Deletion Policy -->
+    @php
+        $currentRetentionDays = (int) ($settings->get('soft_delete_retention_days')?->value_plain ?? 0);
+    @endphp
     <form method="POST" action="{{ route('admin.settings.update') }}" class="space-y-6">
         @csrf
         @method('PUT')
 
-        <!-- Document & Deletion Policy -->
-        @php
-            $currentRetentionDays = (int) ($settings->get('soft_delete_retention_days')?->value_plain ?? 0);
-        @endphp
         <div class="aikchol-card p-6 space-y-5" x-data="{ retentionDays: {{ $currentRetentionDays }} }">
             <h3 class="text-sm font-bold text-[#004F85]">นโยบายความปลอดภัยเอกสารและถังเอกสาร (Soft Deleted Documents)</h3>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-xs font-medium text-slate-700 mb-1">ขนาดไฟล์สูงสุดที่อนุญาต (KB)</label>
-                    <input type="number" name="max_file_size_kb" value="{{ $settings->get('max_file_size_kb')?->value_plain ?? 20480 }}" min="512" max="102400" required class="aikchol-input text-sm">
+                    <input type="number" name="max_file_size_kb" value="{{ old('max_file_size_kb', $settings->get('max_file_size_kb')?->value_plain ?? 20480) }}" min="512" max="102400" required class="aikchol-input text-sm">
                 </div>
                 <div class="flex items-center pt-5">
                     <label class="inline-flex items-start gap-2.5 text-xs cursor-pointer">
@@ -50,7 +50,7 @@
                         กำหนดระยะเวลาเก็บเอกสารในถังเอกสาร (Soft Deleted Documents) ก่อนลบถาวรอัตโนมัติ (วัน)
                     </label>
                     <p class="text-[11px] text-slate-500 mt-0.5">
-                        ตั้งค่าเป็น <code class="font-mono">0</code> เพื่อปิดการลบอัตโนมัติ หรือเลือกจำนวนวัน เช่น 30, 45, 90 วัน (ระบบจะรันคำสั่ง <code class="font-mono">documents:purge-expired-trash</code> ทุกวันเวลา 02:00 น. และยังคงเก็บ Audit Log ไว้เสมอ)
+                        ตั้งค่าเป็น <code class="font-mono">0</code> เพื่อปิดการลบอัตโนมัติ หรือเลือกจำนวนวัน เช่น 30, 45, 90 วัน (รันอัตโนมัติทุกวันเวลา 02:00 น. และยังคงเก็บ Audit Log ไว้เสมอ)
                     </p>
                 </div>
 
@@ -84,77 +84,66 @@
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- SQL Server 2014 Connection Settings -->
-        <div class="aikchol-card p-6 space-y-4">
-            <div class="flex items-center justify-between">
-                <h3 class="text-sm font-bold text-[#004F85]">การตั้งค่าเชื่อมต่อ SQL Server 2014 (Connection: patient_sqlsrv)</h3>
-                <span class="text-xs font-mono text-slate-500">Driver: {{ $envSummary['patient_db_connection'] }}</span>
+            <!-- Re-authentication for privileged setting changes (SEC-M-03) -->
+            <div class="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div class="max-w-sm flex-1">
+                    <label for="current_password" class="block text-xs font-semibold text-slate-700 mb-1">ยืนยันรหัสผ่านผู้ดูแลระบบปัจจุบัน *</label>
+                    <input id="current_password" type="password" name="current_password" required autocomplete="current-password" placeholder="กรอกรหัสผ่านปัจจุบันเพื่อบันทึกการเปลี่ยนแปลง" class="aikchol-input text-sm">
+                </div>
+                <button type="submit" class="aikchol-btn-primary px-6 py-2.5 rounded-lg text-sm font-semibold shadow-sm cursor-pointer">
+                    บันทึกการตั้งค่าระบบ
+                </button>
             </div>
-
-            <div class="p-3.5 rounded-lg bg-[#EBF4FA]/60 border border-[#DCE6EF] text-xs text-slate-700">
-                <strong>หมายเหตุการ Deploy จริง:</strong> แนะนำให้ตั้งค่า Credential ผ่านไฟล์ <code class="font-mono">.env</code> บนเซิร์ฟเวอร์ Production ที่จำกัดสิทธิ์ไฟล์ และใช้บัญชี SQL Server แบบ <strong>Read-Only</strong> เท่านั้น
-            </div>
-
-            <label class="inline-flex items-center gap-2 text-sm font-medium text-slate-800">
-                <input type="checkbox" name="patient_db_enabled" value="1" @checked(($settings->get('patient_db_enabled')?->value_plain ?? '0') === '1') class="rounded text-[#004F85]">
-                <span>เปิดใช้งานการค้นหาผู้ป่วยจาก SQL Server 2014 (PATIENT_DB_ENABLED)</span>
-            </label>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-xs font-medium text-slate-700 mb-1">Host / Server Address</label>
-                    <input type="text" name="patient_db_host" value="{{ $settings->get('patient_db_host')?->value_plain ?? '' }}" placeholder="ระบุจากทีม IT โรงพยาบาล" class="aikchol-input text-sm font-mono">
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-slate-700 mb-1">Port</label>
-                    <input type="number" name="patient_db_port" value="{{ $settings->get('patient_db_port')?->value_plain ?? 1433 }}" required class="aikchol-input text-sm font-mono">
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-slate-700 mb-1">Database Name</label>
-                    <input type="text" name="patient_db_database" value="{{ $settings->get('patient_db_database')?->value_plain ?? '' }}" class="aikchol-input text-sm font-mono">
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-slate-700 mb-1">Read-Only Username</label>
-                    <input type="text" name="patient_db_username" value="{{ $settings->get('patient_db_username')?->value_plain ?? '' }}" autocomplete="off" class="aikchol-input text-sm font-mono">
-                </div>
-                <div class="sm:col-span-2">
-                    <label class="block text-xs font-medium text-slate-700 mb-1">
-                        Read-Only Password
-                        <span class="text-slate-400 font-normal">
-                            ({{ $hasPasswordSet ? 'มีรหัสผ่านบันทึกไว้แล้ว — เว้นว่างหากไม่ต้องการเปลี่ยน ระบบจะไม่แสดงรหัสผ่านเดิม' : 'ยังไม่ได้ตั้งรหัสผ่าน' }})
-                        </span>
-                    </label>
-                    <input type="password" name="patient_db_password" value="" autocomplete="new-password" placeholder="กรอกเฉพาะเมื่อต้องการตั้งหรือเปลี่ยนรหัสผ่านใหม่" class="aikchol-input text-sm">
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-slate-700 mb-1">Login Timeout (วินาที)</label>
-                    <input type="number" name="patient_db_login_timeout" value="{{ $settings->get('patient_db_login_timeout')?->value_plain ?? 5 }}" min="1" max="60" required class="aikchol-input text-sm">
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-slate-700 mb-1">Query Timeout (วินาที)</label>
-                    <input type="number" name="patient_db_query_timeout" value="{{ $settings->get('patient_db_query_timeout')?->value_plain ?? 10 }}" min="1" max="120" required class="aikchol-input text-sm">
-                </div>
-            </div>
-
-            <div class="pt-2 space-y-2 border-t border-slate-100">
-                <label class="flex items-center gap-2 text-xs text-slate-800">
-                    <input type="checkbox" name="patient_db_encrypt" value="1" @checked(($settings->get('patient_db_encrypt')?->value_plain ?? '1') === '1') class="rounded text-[#004F85]">
-                    <span><strong>Encrypt Connection (TLS)</strong> — แนะนำให้เปิดไว้เสมอ (Default: true)</span>
-                </label>
-                <label class="flex items-center gap-2 text-xs text-slate-800">
-                    <input type="checkbox" name="patient_db_trust_server_certificate" value="1" @checked(($settings->get('patient_db_trust_server_certificate')?->value_plain ?? '0') === '1') class="rounded text-amber-600">
-                    <span><strong>Trust Server Certificate</strong> — ห้ามเปิดเป็นค่าเริ่มต้น (Default: false) เว้นแต่มีเอกสารอนุมัติจากทีม Security</span>
-                </label>
-            </div>
-        </div>
-
-        <div class="flex justify-end">
-            <button type="submit" class="aikchol-btn-primary px-6 py-2.5 rounded-lg text-sm font-semibold shadow-sm cursor-pointer">
-                บันทึกการตั้งค่าระบบ
-            </button>
         </div>
     </form>
+
+    <!-- Read-Only SQL Server 2014 Environment Status (Option 1 — SEC-H-05) -->
+    <div class="aikchol-card p-6 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+                <h3 class="text-sm font-bold text-[#004F85]">สถานะการเชื่อมต่อ Microsoft SQL Server 2014 (Read-Only จาก .env)</h3>
+                <p class="text-xs text-slate-500 mt-0.5">Connection Name: <code class="font-mono">patient_sqlsrv</code> • แสดงเฉพาะสถานะการตั้งค่า ไม่เปิดเผย IP, Username หรือ Password</p>
+            </div>
+            <span class="px-3 py-1 rounded-full text-xs font-bold {{ $hisEnvStatus['enabled'] ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200' }}">
+                {{ $hisEnvStatus['enabled'] ? 'เปิดใช้งาน (Enabled)' : 'ปิดใช้งาน (Disabled)' }}
+            </span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+            <div class="p-3 rounded-lg bg-slate-50 border border-slate-200/80">
+                <p class="text-slate-500">PHP Driver (`pdo_sqlsrv`)</p>
+                <p class="font-bold mt-0.5 {{ $hisEnvStatus['pdo_sqlsrv_loaded'] ? 'text-emerald-700' : 'text-red-700' }}">
+                    {{ $hisEnvStatus['pdo_sqlsrv_loaded'] ? 'พร้อมใช้งาน (Loaded)' : 'ยังไม่ได้ติดตั้ง/เปิดใช้งาน' }}
+                </p>
+            </div>
+            <div class="p-3 rounded-lg bg-slate-50 border border-slate-200/80">
+                <p class="text-slate-500">Host / Database / Read-Only Account</p>
+                <p class="font-bold mt-0.5 {{ ($hisEnvStatus['host_configured'] && $hisEnvStatus['database_configured'] && $hisEnvStatus['credentials_configured']) ? 'text-emerald-700' : 'text-amber-700' }}">
+                    {{ ($hisEnvStatus['host_configured'] && $hisEnvStatus['database_configured'] && $hisEnvStatus['credentials_configured']) ? 'กำหนดค่าใน .env ครบแล้ว' : 'ยังตั้งค่าใน .env ไม่ครบ' }}
+                </p>
+            </div>
+            <div class="p-3 rounded-lg bg-slate-50 border border-slate-200/80">
+                <p class="text-slate-500">Driver / Port</p>
+                <p class="font-mono font-bold text-slate-800 mt-0.5">{{ $hisEnvStatus['driver'] }} : {{ $hisEnvStatus['port'] }}</p>
+            </div>
+            <div class="p-3 rounded-lg bg-slate-50 border border-slate-200/80">
+                <p class="text-slate-500">TLS Encrypt (`PATIENT_DB_ENCRYPT`)</p>
+                <p class="font-mono font-bold mt-0.5 {{ $hisEnvStatus['encrypt'] === 'yes' ? 'text-emerald-700' : 'text-red-700' }}">{{ $hisEnvStatus['encrypt'] }}</p>
+            </div>
+            <div class="p-3 rounded-lg bg-slate-50 border border-slate-200/80">
+                <p class="text-slate-500">Trust Server Certificate</p>
+                <p class="font-mono font-bold mt-0.5 {{ $hisEnvStatus['trust_cert'] === 'false' ? 'text-emerald-700' : 'text-amber-700' }}">{{ $hisEnvStatus['trust_cert'] }}</p>
+            </div>
+            <div class="p-3 rounded-lg bg-slate-50 border border-slate-200/80">
+                <p class="text-slate-500">Login / Query Timeout</p>
+                <p class="font-mono font-bold text-slate-800 mt-0.5">{{ $hisEnvStatus['login_timeout'] }}s / {{ $hisEnvStatus['query_timeout'] }}s</p>
+            </div>
+        </div>
+
+        <div class="p-3.5 rounded-lg bg-[#EBF4FA]/60 border border-[#DCE6EF] text-xs text-slate-700">
+            <strong>แนวทางจัดการสำหรับผู้ดูแลเซิร์ฟเวอร์:</strong> หากต้องการปรับเปลี่ยน Host, Database, รหัสผ่าน Read-Only หรือนโยบาย TLS ให้แก้ไขในไฟล์ <code class="font-mono">.env</code> บนเซิร์ฟเวอร์ตามคู่มือ <code class="font-mono">docs/SQL_SERVER_2014_INTEGRATION_GUIDE.md</code> แล้วรัน <code class="font-mono">php artisan config:clear</code>
+        </div>
+    </div>
 </div>
 @endsection

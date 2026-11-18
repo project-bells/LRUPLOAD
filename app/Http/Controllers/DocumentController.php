@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 
 class DocumentController extends Controller
 {
@@ -74,6 +75,7 @@ class DocumentController extends Controller
     public function create(Patient $patient): View
     {
         $this->authorize('create', Document::class);
+        $this->authorize('view', $patient);
 
         $patient->load(['mothers', 'children']);
         $relatedPatients = $patient->patient_type === PatientType::Mother
@@ -86,6 +88,7 @@ class DocumentController extends Controller
             'documentTypes' => DocumentType::query()->where('is_active', true)->orderBy('sort_order')->get(),
             'ownerTypes' => PatientOwnerType::cases(),
             'confidentialityLevels' => ConfidentialityLevel::cases(),
+            'maxFileSizeKb' => $this->fileStorage->maxFileSizeKb(),
         ]);
     }
 
@@ -99,6 +102,9 @@ class DocumentController extends Controller
         /** @var User $user */
         $user = $request->user();
         $validated = $request->validated();
+
+        $patient = Patient::query()->findOrFail((int) $validated['patient_id']);
+        $this->authorize('view', $patient);
 
         $stagedFile = $this->fileStorage->stageUpload($request->file('file'), $user);
         $stagingToken = (string) $stagedFile['token'];
@@ -121,7 +127,9 @@ class DocumentController extends Controller
             ],
             'file' => $stagedFile,
             'idempotency_token' => $idempotencyToken,
+            'reviewed' => false,
             'created_at' => now()->getTimestamp(),
+            'expires_at' => now()->addMinutes(30)->getTimestamp(),
         ]);
 
         return redirect()->route('documents.review', ['token' => $stagingToken]);
@@ -138,10 +146,23 @@ class DocumentController extends Controller
         $user = $request->user();
         $staged = $request->session()->get("staged_documents.{$token}");
 
-        if (! is_array($staged) || (int) ($staged['user_id'] ?? 0) !== $user->id) {
+        if (
+            ! is_array($staged) ||
+            (int) ($staged['user_id'] ?? 0) !== $user->id ||
+            (int) ($staged['expires_at'] ?? 0) < now()->getTimestamp()
+        ) {
+            if (is_array($staged)) {
+                $request->session()->forget("staged_documents.{$token}");
+                $this->fileStorage->deleteStagedFile((string) ($staged['file']['tmp_path'] ?? ''));
+            }
+
             return redirect()->route('patients.lookup.index')
                 ->withErrors(['file' => 'ไม่พบข้อมูลเอกสารที่รอตรวจสอบ หรือรายการหมดอายุแล้ว กรุณาดำเนินการใหม่']);
         }
+
+        // Mark explicitly reviewed so direct confirm() bypasses are rejected (SEC-H-03)
+        $staged['reviewed'] = true;
+        $request->session()->put("staged_documents.{$token}", $staged);
 
         $patient = Patient::query()->with(['mothers', 'children'])->findOrFail((int) $staged['patient_id']);
         $relatedPatient = isset($staged['related_patient_id']) && $staged['related_patient_id'] !== null
@@ -182,23 +203,29 @@ class DocumentController extends Controller
         $staged = $request->session()->get("staged_documents.{$token}")
             ?? $request->session()->get("staged_revisions.{$token}");
 
-        if (! is_array($staged) || (int) ($staged['user_id'] ?? 0) !== $user->id) {
-            abort(403, 'คุณไม่มีสิทธิ์เปิดดูไฟล์ชั่วคราวนี้');
+        if (
+            ! is_array($staged) ||
+            (int) ($staged['user_id'] ?? 0) !== $user->id ||
+            (int) ($staged['expires_at'] ?? 0) < now()->getTimestamp()
+        ) {
+            abort(403, 'คุณไม่มีสิทธิ์เปิดดูไฟล์ชั่วคราวนี้ หรือไฟล์หมดอายุแล้ว');
         }
 
         $file = $staged['file'];
         $absPath = $this->fileStorage->resolveStagedAbsolutePath((string) $file['tmp_path']);
+        $safeName = basename((string) $file['original_name']);
+        $asciiFallback = preg_replace('/[^\x20-\x7E]/', '_', $safeName) ?: ('preview.' . ($file['extension'] ?? 'pdf'));
 
         return response()->file($absPath, [
             'Content-Type' => (string) $file['mime_type'],
-            'Content-Disposition' => 'inline; filename="' . basename((string) $file['original_name']) . '"',
+            'Content-Disposition' => HeaderUtils::makeDisposition(HeaderUtils::DISPOSITION_INLINE, $safeName, $asciiFallback),
             'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0, private',
             'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
     /**
-     * Step 3: Confirm & Save atomically with idempotency token protection against duplicate submission.
+     * Step 3: Confirm & Save atomically with review-gate & idempotency token protection.
      */
     public function confirm(ConfirmDocumentRequest $request): RedirectResponse
     {
@@ -209,12 +236,31 @@ class DocumentController extends Controller
         $stagingToken = (string) $request->validated('staging_token');
         $idempotencyToken = (string) $request->validated('idempotency_token');
 
+        $peeked = $request->session()->get("staged_documents.{$stagingToken}");
+        if (! is_array($peeked) || (int) ($peeked['user_id'] ?? 0) !== $user->id) {
+            return redirect()->route('documents.index')
+                ->withErrors(['idempotency_token' => 'รายการนี้ถูกบันทึกไปแล้วหรือหมดอายุ กรุณาตรวจสอบรายการเอกสาร']);
+        }
+
+        if (($peeked['expires_at'] ?? 0) < now()->getTimestamp()) {
+            $request->session()->forget("staged_documents.{$stagingToken}");
+            $this->fileStorage->deleteStagedFile((string) ($peeked['file']['tmp_path'] ?? ''));
+
+            return redirect()->route('patients.lookup.index')
+                ->withErrors(['idempotency_token' => 'รายการรอตรวจสอบหมดอายุแล้ว กรุณาอัปโหลดไฟล์ใหม่อีกครั้ง']);
+        }
+
+        // Enforce Review Before Save step (SEC-H-03)
+        if (($peeked['reviewed'] ?? false) !== true) {
+            return redirect()->route('documents.review', ['token' => $stagingToken])
+                ->withErrors(['idempotency_token' => 'กรุณาตรวจสอบข้อมูลและตัวอย่างเอกสารก่อนกดยืนยันบันทึก']);
+        }
+
         // Atomic pull from session prevents duplicate submission / double-click race
         $staged = $request->session()->pull("staged_documents.{$stagingToken}");
 
         if (
             ! is_array($staged) ||
-            (int) ($staged['user_id'] ?? 0) !== $user->id ||
             ! hash_equals((string) ($staged['idempotency_token'] ?? ''), $idempotencyToken)
         ) {
             return redirect()->route('documents.index')

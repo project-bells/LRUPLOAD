@@ -18,8 +18,28 @@
         </div>
     </div>
 
-    <!-- Filter Form -->
+    <!-- PDPA-Safe POST HN Hash Filter (never puts plaintext HN in GET URL / access logs) -->
+    <form method="POST" action="{{ route('audit-logs.search-hn') }}" class="aikchol-card p-4 flex flex-col sm:flex-row sm:items-end gap-3">
+        @csrf
+        <div class="flex-1 max-w-sm">
+            <label for="audit_hn" class="block text-xs font-medium text-slate-600 mb-1">ค้นหาประวัติด้วย HN (ส่งแบบ POST เพื่อแปลงเป็น HN Hash อย่างปลอดภัย)</label>
+            <input id="audit_hn" type="text" name="hn" required autocomplete="off" placeholder="กรอก HN ที่ต้องการตรวจสอบ..." class="aikchol-input text-xs font-mono">
+        </div>
+        <button type="submit" class="aikchol-btn-primary px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer shrink-0">
+            ค้นหาด้วย HN Hash
+        </button>
+        @if(request()->filled('hn_hash'))
+            <span class="text-[11px] font-mono text-[#004F85] bg-[#EBF4FA] px-2.5 py-1.5 rounded-lg">
+                กำลังกรอง HN Hash: {{ \Illuminate\Support\Str::limit(request('hn_hash'), 16) }}
+            </span>
+        @endif
+    </form>
+
+    <!-- Filter Form (GET — strictly non-PII parameters only) -->
     <form method="GET" action="{{ route('audit-logs.index') }}" class="aikchol-card p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+        @if(request()->filled('hn_hash'))
+            <input type="hidden" name="hn_hash" value="{{ request('hn_hash') }}">
+        @endif
         <div>
             <label class="block text-xs font-medium text-slate-600 mb-1">เหตุการณ์ (Action)</label>
             <select name="action" class="aikchol-input text-xs">
@@ -48,12 +68,12 @@
             </select>
         </div>
         <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1">กรองด้วย HN (แปลงเป็น Hash)</label>
-            <input type="text" name="hn_search" value="{{ request('hn_search') }}" placeholder="ระบุ HN..." class="aikchol-input text-xs font-mono">
-        </div>
-        <div>
             <label class="block text-xs font-medium text-slate-600 mb-1">ตั้งแต่วันที่</label>
             <input type="date" name="date_from" value="{{ request('date_from') }}" class="aikchol-input text-xs">
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">ถึงวันที่</label>
+            <input type="date" name="date_to" value="{{ request('date_to') }}" class="aikchol-input text-xs">
         </div>
         <div class="flex gap-2">
             <button type="submit" class="aikchol-btn-primary flex-1 py-2 rounded-lg text-xs font-semibold cursor-pointer">กรอง</button>

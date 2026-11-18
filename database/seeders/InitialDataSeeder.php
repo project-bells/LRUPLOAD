@@ -63,16 +63,6 @@ class InitialDataSeeder extends Seeder
             ['group_name' => 'security', 'key' => 'permanent_delete_enabled', 'value_plain' => '1', 'is_secret' => false],
             ['group_name' => 'security', 'key' => 'soft_delete_retention_days', 'value_plain' => '0', 'is_secret' => false],
             ['group_name' => 'security', 'key' => 'max_file_size_kb', 'value_plain' => '20480', 'is_secret' => false],
-            ['group_name' => 'patient_sqlsrv', 'key' => 'patient_db_enabled', 'value_plain' => '0', 'is_secret' => false],
-            ['group_name' => 'patient_sqlsrv', 'key' => 'patient_db_host', 'value_plain' => '', 'is_secret' => false],
-            ['group_name' => 'patient_sqlsrv', 'key' => 'patient_db_port', 'value_plain' => '1433', 'is_secret' => false],
-            ['group_name' => 'patient_sqlsrv', 'key' => 'patient_db_database', 'value_plain' => '', 'is_secret' => false],
-            ['group_name' => 'patient_sqlsrv', 'key' => 'patient_db_username', 'value_plain' => '', 'is_secret' => false],
-            ['group_name' => 'patient_sqlsrv', 'key' => 'patient_db_password', 'value_plain' => null, 'is_secret' => true],
-            ['group_name' => 'patient_sqlsrv', 'key' => 'patient_db_encrypt', 'value_plain' => '1', 'is_secret' => false],
-            ['group_name' => 'patient_sqlsrv', 'key' => 'patient_db_trust_server_certificate', 'value_plain' => '0', 'is_secret' => false],
-            ['group_name' => 'patient_sqlsrv', 'key' => 'patient_db_login_timeout', 'value_plain' => '5', 'is_secret' => false],
-            ['group_name' => 'patient_sqlsrv', 'key' => 'patient_db_query_timeout', 'value_plain' => '10', 'is_secret' => false],
         ];
 
         foreach ($defaultSettings as $setting) {

@@ -58,8 +58,12 @@
                     @endforeach
                 </div>
             </div>
-            <div class="md:col-span-3 flex justify-end">
-                <button type="submit" class="aikchol-btn-primary px-5 py-2 rounded-lg text-xs font-semibold cursor-pointer">สร้างบัญชีผู้ใช้</button>
+            <div class="md:col-span-3 flex flex-col sm:flex-row sm:items-end justify-end gap-3">
+                <div class="sm:w-64">
+                    <label class="block text-xs font-medium text-slate-600 mb-1">รหัสผ่าน Admin ปัจจุบันเพื่อยืนยัน *</label>
+                    <input type="password" name="current_password" required autocomplete="current-password" placeholder="••••••••" class="aikchol-input text-xs">
+                </div>
+                <button type="submit" class="aikchol-btn-primary px-5 py-2.5 rounded-lg text-xs font-semibold cursor-pointer">สร้างบัญชีผู้ใช้</button>
             </div>
         </form>
     </div>
@@ -96,12 +100,13 @@
                             <label class="block text-[11px] text-slate-500 mb-1">รหัสผ่านใหม่ (เว้นว่างหากไม่เปลี่ยน)</label>
                             <input type="password" name="password" minlength="10" placeholder="••••••••" class="aikchol-input text-xs">
                         </div>
-                        <div class="flex items-center justify-between gap-2">
+                        <div class="flex flex-col gap-1.5">
                             <label class="inline-flex items-center gap-1.5 text-xs">
                                 <input type="checkbox" name="is_active" value="1" @checked($u->is_active) class="rounded text-[#004F85]">
                                 <span>เปิดใช้งาน</span>
                             </label>
-                            <button type="submit" class="aikchol-btn-primary px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer">บันทึก</button>
+                            <input type="password" name="current_password" required autocomplete="current-password" placeholder="รหัสผ่าน Admin *" class="aikchol-input text-xs">
+                            <button type="submit" class="aikchol-btn-primary px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer">บันทึก</button>
                         </div>
                     </div>
                     <div class="flex flex-wrap items-center gap-2 pt-1">

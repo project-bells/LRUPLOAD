@@ -72,6 +72,10 @@ class DeleteRequestService
                 throw new RuntimeException('คำขอลบนี้ได้รับการดำเนินการไปแล้ว');
             }
 
+            if ((int) $lockedReq->requested_by === (int) $reviewer->id) {
+                throw new RuntimeException('ไม่สามารถอนุมัติคำขอลบเอกสารที่ตนเองเป็นผู้ร้องขอได้');
+            }
+
             /** @var Document $document */
             $document = Document::withTrashed()->whereKey($lockedReq->document_id)->lockForUpdate()->firstOrFail();
 
@@ -129,6 +133,10 @@ class DeleteRequestService
 
             if ($lockedReq->status !== DeleteRequestStatus::Pending) {
                 throw new RuntimeException('คำขอลบนี้ได้รับการดำเนินการไปแล้ว');
+            }
+
+            if ((int) $lockedReq->requested_by === (int) $reviewer->id) {
+                throw new RuntimeException('ไม่สามารถอนุมัติคำขอลบเอกสารที่ตนเองเป็นผู้ร้องขอได้');
             }
 
             $lockedReq->status = DeleteRequestStatus::Rejected;

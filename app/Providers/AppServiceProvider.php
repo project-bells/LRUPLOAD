@@ -91,6 +91,16 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
 
+        // Document & revision upload rate limiting to prevent disk exhaustion / flood
+        RateLimiter::for('document-upload', static function (Request $request): array {
+            $userId = $request->user()?->id ?? 'anon';
+
+            return [
+                Limit::perMinute(20)->by('upload-user:' . $userId),
+                Limit::perMinute(40)->by('upload-ip:' . $request->ip()),
+            ];
+        });
+
         // Share Aikchol Hospital branding across all Blade views
         View::composer('*', static function ($view): void {
             static $cachedBranding = null;

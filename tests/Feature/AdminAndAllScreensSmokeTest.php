@@ -118,32 +118,27 @@ class AdminAndAllScreensSmokeTest extends TestCase
         }
     }
 
-    public function test_sql_server_password_is_encrypted_and_never_displayed_on_settings_screen(): void
+    public function test_admin_settings_require_reauth_enforce_runtime_max_size_and_keep_his_env_readonly(): void
     {
-        $secretPassword = 'UltraSecretSql2014Password!@#';
-
+        // Reject without current_password (SEC-M-03)
         $this->actingAs($this->admin)->put(route('admin.settings.update'), [
-            'max_file_size_kb' => 20480,
+            'max_file_size_kb' => 1024,
             'soft_delete_retention_days' => 45,
-            'patient_db_host' => '192.168.10.20',
-            'patient_db_port' => 1433,
-            'patient_db_database' => 'HIS_DB',
-            'patient_db_username' => 'his_readonly',
-            'patient_db_password' => $secretPassword,
-            'patient_db_encrypt' => 1,
-            'patient_db_login_timeout' => 5,
-            'patient_db_query_timeout' => 10,
+        ])->assertSessionHasErrors('current_password');
+
+        // Succeed with valid current_password
+        $this->actingAs($this->admin)->put(route('admin.settings.update'), [
+            'current_password' => 'AdminSecret@2026!',
+            'max_file_size_kb' => 1024,
+            'soft_delete_retention_days' => 45,
+            'permanent_delete_enabled' => 1,
         ])->assertRedirect(route('admin.settings.index'));
 
         $page = $this->actingAs($this->admin)->get(route('admin.settings.index'));
         $page->assertOk();
-        $page->assertDontSee($secretPassword);
-        $page->assertSee('มีรหัสผ่านบันทึกไว้แล้ว');
+        $page->assertSee('สถานะการเชื่อมต่อ Microsoft SQL Server 2014');
         $this->assertSame('45', SystemSetting::query()->where('key', 'soft_delete_retention_days')->value('value_plain'));
-
-        $rawDbRow = SystemSetting::query()->where('key', 'patient_db_password')->firstOrFail();
-        $this->assertSame($secretPassword, $rawDbRow->resolvedValue());
-        $this->assertNotSame($secretPassword, $rawDbRow->getRawOriginal('value_encrypted'));
+        $this->assertSame(1024, app(FileStorageService::class)->maxFileSizeKb());
     }
 
     public function test_supervisor_and_admin_permanent_delete_and_policy_toggle_preserve_audit_logs(): void

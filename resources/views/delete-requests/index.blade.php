@@ -49,18 +49,24 @@
                 </div>
 
                 @if($req->status === \App\Enums\DeleteRequestStatus::Pending)
-                    <form method="POST" action="{{ route('delete-requests.review', $req) }}" class="pt-3 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
-                        @csrf
-                        <input type="text" name="review_note" placeholder="หมายเหตุการพิจารณา (บังคับระบุหากปฏิเสธ)" class="aikchol-input text-xs flex-1">
-                        <div class="flex gap-2 shrink-0">
-                            <button type="submit" name="decision" value="approve" onclick="return confirm('ยืนยันอนุมัติ Soft Delete เอกสารนี้?')" class="px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-700 text-white hover:bg-emerald-800 cursor-pointer">
-                                อนุมัติ (Soft Delete)
-                            </button>
-                            <button type="submit" name="decision" value="reject" class="px-4 py-2 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700 cursor-pointer">
-                                ปฏิเสธคำขอ
-                            </button>
+                    @if((int) $req->requested_by === (int) auth()->id())
+                        <div class="pt-3 border-t border-slate-100 text-xs text-amber-800 bg-[#FFF8E6] rounded-lg px-3 py-2">
+                            ไม่สามารถอนุมัติคำขอลบเอกสารที่ตนเองเป็นผู้ร้องขอได้ (กรุณารอหัวหน้าหน่วยงานหรือผู้ดูแลระบบท่านอื่นพิจารณา)
                         </div>
-                    </form>
+                    @else
+                        <form method="POST" action="{{ route('delete-requests.review', $req) }}" class="pt-3 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
+                            @csrf
+                            <input type="text" name="review_note" placeholder="หมายเหตุการพิจารณา (บังคับระบุหากปฏิเสธ)" class="aikchol-input text-xs flex-1">
+                            <div class="flex gap-2 shrink-0">
+                                <button type="submit" name="decision" value="approve" onclick="return confirm('ยืนยันอนุมัติ Soft Delete เอกสารนี้?')" class="px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-700 text-white hover:bg-emerald-800 cursor-pointer">
+                                    อนุมัติ (Soft Delete)
+                                </button>
+                                <button type="submit" name="decision" value="reject" class="px-4 py-2 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700 cursor-pointer">
+                                    ปฏิเสธคำขอ
+                                </button>
+                            </div>
+                        </form>
+                    @endif
                 @endif
             </div>
         @empty

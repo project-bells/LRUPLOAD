@@ -65,7 +65,9 @@ class DocumentRevisionController extends Controller
             'notes' => $validated['notes'] ?? null,
             'file' => $stagedFile,
             'idempotency_token' => $idempotencyToken,
+            'reviewed' => false,
             'created_at' => now()->getTimestamp(),
+            'expires_at' => now()->addMinutes(30)->getTimestamp(),
         ]);
 
         return redirect()->route('documents.revisions.review', [
@@ -85,11 +87,20 @@ class DocumentRevisionController extends Controller
         if (
             ! is_array($staged) ||
             (int) ($staged['user_id'] ?? 0) !== $user->id ||
-            (int) ($staged['document_id'] ?? 0) !== $document->id
+            (int) ($staged['document_id'] ?? 0) !== $document->id ||
+            (int) ($staged['expires_at'] ?? 0) < now()->getTimestamp()
         ) {
+            if (is_array($staged)) {
+                $request->session()->forget("staged_revisions.{$token}");
+                $this->fileStorage->deleteStagedFile((string) ($staged['file']['tmp_path'] ?? ''));
+            }
+
             return redirect()->route('documents.revisions.create', $document)
                 ->withErrors(['file' => 'รายการตรวจสอบ Revision หมดอายุหรือไม่ถูกต้อง กรุณาอัปโหลดใหม่']);
         }
+
+        $staged['reviewed'] = true;
+        $request->session()->put("staged_revisions.{$token}", $staged);
 
         $document->load(['documentType', 'patients', 'currentRevision.storedFile']);
 
@@ -120,12 +131,33 @@ class DocumentRevisionController extends Controller
         $stagingToken = (string) $request->validated('staging_token');
         $idempotencyToken = (string) $request->validated('idempotency_token');
 
+        $peeked = $request->session()->get("staged_revisions.{$stagingToken}");
+        if (
+            ! is_array($peeked) ||
+            (int) ($peeked['user_id'] ?? 0) !== $user->id ||
+            (int) ($peeked['document_id'] ?? 0) !== $document->id
+        ) {
+            return redirect()->route('documents.show', $document)
+                ->withErrors(['idempotency_token' => 'Revision นี้ถูกบันทึกไปแล้วหรือหมดอายุ']);
+        }
+
+        if (($peeked['expires_at'] ?? 0) < now()->getTimestamp()) {
+            $request->session()->forget("staged_revisions.{$stagingToken}");
+            $this->fileStorage->deleteStagedFile((string) ($peeked['file']['tmp_path'] ?? ''));
+
+            return redirect()->route('documents.revisions.create', $document)
+                ->withErrors(['idempotency_token' => 'รายการตรวจสอบ Revision หมดอายุแล้ว กรุณาอัปโหลดใหม่']);
+        }
+
+        if (($peeked['reviewed'] ?? false) !== true) {
+            return redirect()->route('documents.revisions.review', ['document' => $document->id, 'token' => $stagingToken])
+                ->withErrors(['idempotency_token' => 'กรุณาตรวจสอบตัวอย่าง Revision ก่อนกดยืนยันบันทึก']);
+        }
+
         $staged = $request->session()->pull("staged_revisions.{$stagingToken}");
 
         if (
             ! is_array($staged) ||
-            (int) ($staged['user_id'] ?? 0) !== $user->id ||
-            (int) ($staged['document_id'] ?? 0) !== $document->id ||
             ! hash_equals((string) ($staged['idempotency_token'] ?? ''), $idempotencyToken)
         ) {
             return redirect()->route('documents.show', $document)

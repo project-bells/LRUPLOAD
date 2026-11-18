@@ -1,0 +1,103 @@
+@import 'tailwindcss';
+@import '@fontsource/noto-sans-thai/400.css';
+@import '@fontsource/noto-sans-thai/500.css';
+@import '@fontsource/noto-sans-thai/600.css';
+@import '@fontsource/noto-sans-thai/700.css';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source "../**/*.blade.php";
+@source "../**/*.js";
+
+@theme {
+    --font-sans: 'Noto Sans Thai', ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+    --color-aikchol-primary: #004F85;
+    --color-aikchol-primary-dark: #003B63;
+    --color-aikchol-primary-soft: #EBF4FA;
+
+    --color-aikchol-secondary: #3EC0C8;
+    --color-aikchol-secondary-dark: #1F8E96;
+    --color-aikchol-secondary-soft: #EAF8F9;
+
+    --color-aikchol-accent: #FBB435;
+    --color-aikchol-accent-dark: #9A6000;
+    --color-aikchol-accent-soft: #FFF8E6;
+
+    --color-hospital-bg: #F4F8FB;
+    --color-hospital-border: #DCE6EF;
+}
+
+@layer base {
+    body {
+        background-color: var(--color-hospital-bg);
+        color: #1E293B;
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+    }
+}
+
+.aikchol-card {
+    background-color: #FFFFFF;
+    border: 1px solid #DCE6EF;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 2px 0 rgba(0, 79, 133, 0.05);
+}
+
+.aikchol-btn-primary {
+    background-color: var(--brand-primary, #004F85);
+    color: #FFFFFF;
+    transition: background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.aikchol-btn-primary:hover {
+    filter: brightness(0.9);
+}
+
+.aikchol-btn-secondary {
+    background-color: var(--brand-secondary, #3EC0C8);
+    color: #083344;
+    font-weight: 600;
+    transition: filter 150ms ease;
+}
+
+.aikchol-btn-secondary:hover {
+    filter: brightness(0.95);
+}
+
+.aikchol-input {
+    width: 100%;
+    border: 1px solid #CBD5E1;
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.85rem;
+    font-size: 0.9375rem;
+    background-color: #FFFFFF;
+    color: #1E293B;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.aikchol-input:focus {
+    outline: none;
+    border-color: var(--brand-primary, #004F85);
+    box-shadow: 0 0 0 3px rgba(0, 79, 133, 0.14);
+}
+
+.aikchol-input-readonly {
+    background-color: #F1F5F9;
+    color: #334155;
+    border-color: #DCE6EF;
+    cursor: not-allowed;
+}
+
+[x-cloak] {
+    display: none !important;
+}
+
+@media print {
+    .no-print {
+        display: none !important;
+    }
+    body {
+        background: #FFFFFF !important;
+    }
+}

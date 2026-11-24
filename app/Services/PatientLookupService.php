@@ -112,11 +112,13 @@ class PatientLookupService
                 sourceFetchedAt: $fetchedAt,
             );
         } catch (PatientLookupException $e) {
+            $errorDetail = $this->hnSecurity->redactInlineSecrets($e->getMessage());
+
             Log::error('Patient lookup failed with classified HIS exception.', [
                 'lookup_status' => $e->lookupStatus->value,
                 'hn_hash' => $hnHash,
                 'user_id' => $actor->id,
-                'error_detail' => $this->hnSecurity->redactInlineSecrets($e->getMessage()),
+                'error_detail' => $errorDetail,
             ]);
 
             $this->auditLog->record(
@@ -124,18 +126,27 @@ class PatientLookupService
                 user: $actor,
                 outcome: 'failed',
                 hnHash: $hnHash,
-                afterData: ['status' => $e->lookupStatus->value],
+                afterData: [
+                    'status' => $e->lookupStatus->value,
+                    'reason' => $errorDetail,
+                ],
                 request: $request,
             );
 
-            return new PatientLookupResult(status: $e->lookupStatus);
+            return new PatientLookupResult(
+                status: $e->lookupStatus,
+                message: $this->formatDetailedErrorMessage($e->lookupStatus, $errorDetail),
+                errorDetail: $errorDetail,
+            );
         } catch (Throwable $e) {
+            $errorDetail = $this->hnSecurity->redactInlineSecrets($e->getMessage());
+
             Log::error('Unexpected error during patient lookup.', [
                 'lookup_status' => LookupStatus::UnexpectedError->value,
                 'hn_hash' => $hnHash,
                 'user_id' => $actor->id,
                 'exception_class' => $e::class,
-                'error_detail' => $this->hnSecurity->redactInlineSecrets($e->getMessage()),
+                'error_detail' => $errorDetail,
             ]);
 
             $this->auditLog->record(
@@ -143,11 +154,18 @@ class PatientLookupService
                 user: $actor,
                 outcome: 'failed',
                 hnHash: $hnHash,
-                afterData: ['status' => LookupStatus::UnexpectedError->value],
+                afterData: [
+                    'status' => LookupStatus::UnexpectedError->value,
+                    'reason' => $errorDetail,
+                ],
                 request: $request,
             );
 
-            return new PatientLookupResult(status: LookupStatus::UnexpectedError);
+            return new PatientLookupResult(
+                status: LookupStatus::UnexpectedError,
+                message: $this->formatDetailedErrorMessage(LookupStatus::UnexpectedError, $errorDetail),
+                errorDetail: $errorDetail,
+            );
         }
     }
 
@@ -179,5 +197,21 @@ class PatientLookupService
         }
 
         return $dto;
+    }
+
+    private function formatDetailedErrorMessage(LookupStatus $status, string $detail): string
+    {
+        $base = $status->userMessageTh();
+        if ($detail === '') {
+            return $base;
+        }
+
+        return match ($status) {
+            LookupStatus::MappingError => "ไม่สามารถอ่านโครงสร้างข้อมูลผู้ป่วยจากระบบต้นทางได้: {$detail}",
+            LookupStatus::ConnectionFailed => 'ไม่สามารถเชื่อมต่อระบบข้อมูลผู้ป่วยได้ในขณะนี้ กรุณาลองใหม่',
+            LookupStatus::Timeout => 'ระบบข้อมูลผู้ป่วยตอบสนองล่าช้าเกินกำหนด กรุณาลองใหม่ในภายหลัง',
+            LookupStatus::UnexpectedError => 'เกิดข้อผิดพลาดระหว่างค้นหาข้อมูลผู้ป่วย กรุณาลองใหม่หรือติดต่อผู้ดูแลระบบ',
+            default => $base,
+        };
     }
 }

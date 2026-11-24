@@ -13,6 +13,7 @@ final readonly class PatientLookupResult
         public ?PatientData $patient = null,
         public ?string $message = null,
         public ?string $sourceFetchedAt = null,
+        public ?string $errorDetail = null,
     ) {
     }
 

@@ -91,9 +91,9 @@ final class SqlServer2014PatientLookup implements PatientLookupInterface
         try {
             $connection = DB::connection($connectionName);
 
-            // Step 1: Lookup patient UID from [dbo].[Patient] by PASID (HN) using strict Parameter Binding
+            // Step 1: Lookup patient UID and core fields from [dbo].[Patient] by PASID (HN) using strict Parameter Binding
             $patientRow = $connection->selectOne(
-                'SELECT TOP 1 [UID] AS patient_uid, [PASID] AS pasid FROM [dbo].[Patient] WHERE [PASID] = ?',
+                'SELECT TOP 1 [UID] AS patient_uid, [PASID] AS pasid, [Forename] AS forename, [MiddleName] AS middle_name, [Surname] AS surname, [BirthDttm] AS birth_date, [StatusFlag] AS status_flag, [TITLEUID] AS title_uid FROM [dbo].[Patient] WHERE [PASID] = ? ORDER BY CASE WHEN [StatusFlag] = \'A\' THEN 0 ELSE 1 END, [UID] DESC',
                 [$hn]
             );
 
@@ -105,17 +105,58 @@ final class SqlServer2014PatientLookup implements PatientLookupInterface
             $patientUid = (int) ($patientArr['patient_uid'] ?? $patientArr['UID'] ?? 0);
 
             if ($patientUid <= 0) {
-                throw PatientLookupException::mappingError('Invalid UID returned from dbo.Patient');
+                throw PatientLookupException::mappingError("รหัสประจำตัวผู้ป่วย (UID) ในตาราง [dbo].[Patient] มีค่าไม่ถูกต้องหรือไม่พบ (HN: {$hn})");
             }
 
             // Step 2a: Fetch full patient name with title via hospital scalar function (Parameter Binding)
-            $nameRow = $connection->selectOne(
-                'SELECT dbo.fGetPatientNameWithTitle(?) AS patient_name',
-                [$patientUid]
-            );
-            $nameArr = $nameRow !== null ? (array) $nameRow : [];
+            $fullName = null;
+            try {
+                $nameRow = $connection->selectOne(
+                    'SELECT dbo.fGetPatientNameWithTitle(?) AS patient_name',
+                    [$patientUid]
+                );
+                if ($nameRow !== null) {
+                    $nameArr = (array) $nameRow;
+                    $fullName = trim((string) ($nameArr['patient_name'] ?? $nameArr['PatientName'] ?? ''));
+                }
+            } catch (Throwable) {
+                // Scalar function might fail or lack permission; fallback to dbo.Patient columns below
+                $fullName = null;
+            }
 
-            // Step 2b: Fetch optional National ID (masked immediately in mapRowToDto).
+            // Step 2b: Fallback to dbo.Patient columns (Forename, MiddleName, Surname, TITLEUID) if scalar function returned empty
+            // (e.g. when patient has StatusFlag != 'A' or scalar function is unpermitted)
+            if ($fullName === null || $fullName === '') {
+                $forename = trim((string) ($patientArr['forename'] ?? ''));
+                $middleName = trim((string) ($patientArr['middle_name'] ?? ''));
+                $surname = trim((string) ($patientArr['surname'] ?? ''));
+                $titleUid = (int) ($patientArr['title_uid'] ?? 0);
+
+                $titleDesc = '';
+                if ($titleUid > 0) {
+                    try {
+                        $titleRow = $connection->selectOne('SELECT dbo.fGetRfValDescription(?) AS title_desc', [$titleUid]);
+                        if ($titleRow !== null) {
+                            $titleArr = (array) $titleRow;
+                            $titleDesc = trim((string) ($titleArr['title_desc'] ?? ''));
+                        }
+                    } catch (Throwable) {
+                        $titleDesc = '';
+                    }
+                }
+
+                $combinedName = trim(($titleDesc !== '' ? "{$titleDesc} " : '') . "{$forename} " . ($middleName !== '' ? "{$middleName} " : '') . "{$surname}");
+                if ($combinedName !== '') {
+                    $fullName = $combinedName;
+                }
+            }
+
+            if ($fullName === null || $fullName === '') {
+                $statusFlag = (string) ($patientArr['status_flag'] ?? '');
+                throw PatientLookupException::mappingError("ไม่พบข้อมูลชื่อ-นามสกุลของผู้ป่วยในระบบ HIS (HN: {$hn}, UID: {$patientUid}, StatusFlag: '{$statusFlag}') เนื่องจากฟังก์ชัน dbo.fGetPatientNameWithTitle คืนค่าว่าง และคอลัมน์ Forename/Surname ใน [dbo].[Patient] ว่างเปล่า");
+            }
+
+            // Step 2c: Fetch optional National ID (masked immediately in mapRowToDto).
             // Gracefully degrades to null if the read-only SQL login does not have EXECUTE on fGetAHCPatientNationalID.
             $rawNationalId = null;
             try {
@@ -131,10 +172,20 @@ final class SqlServer2014PatientLookup implements PatientLookupInterface
                 $rawNationalId = null;
             }
 
+            $birthDate = null;
+            if (! empty($patientArr['birth_date'])) {
+                try {
+                    $birthDate = \Carbon\Carbon::parse((string) $patientArr['birth_date'])->format('Y-m-d');
+                } catch (Throwable) {
+                    $birthDate = (string) $patientArr['birth_date'];
+                }
+            }
+
             return $this->mapRowToDto([
                 'hn' => $patientArr['pasid'] ?? $patientArr['PASID'] ?? $hn,
-                'patient_name' => $nameArr['patient_name'] ?? $nameArr['PatientName'] ?? null,
+                'patient_name' => $fullName,
                 'national_id' => $rawNationalId,
+                'birth_date' => $birthDate,
             ]);
         } catch (PatientLookupException $e) {
             throw $e;

@@ -157,14 +157,39 @@
         @else
             <!-- Friendly Error / Not Found / SQL Server Unavailable State -->
             <div class="aikchol-card p-6 border-amber-300 bg-amber-50/60">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <p class="text-sm font-bold text-amber-900">
-                            {{ $result->status === \App\Enums\LookupStatus::NotFound ? 'ไม่พบข้อมูลผู้ป่วย' : 'ไม่สามารถดึงข้อมูลจากระบบ HIS ได้' }}
-                        </p>
-                        <p class="text-sm text-amber-800 mt-1">{{ $result->displayMessage() }}</p>
+                <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                    <div class="space-y-2 max-w-3xl">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-flex p-1.5 rounded-lg bg-amber-100 text-amber-800 shrink-0">
+                                <svg class="w-5 h-5 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            </span>
+                            <p class="text-sm font-bold text-amber-900">
+                                {{ $result->status === \App\Enums\LookupStatus::NotFound ? 'ไม่พบข้อมูลผู้ป่วย' : 'ไม่สามารถดึงข้อมูลจากระบบ HIS ได้' }}
+                            </p>
+                        </div>
+                        <p class="text-sm text-amber-900 font-medium leading-relaxed">{{ $result->displayMessage() }}</p>
+                        @if($result->errorDetail)
+                            @php
+                                $isMappingError = $result->status === \App\Enums\LookupStatus::MappingError;
+                                $canViewInternalError = (auth()->check() && auth()->user()->hasRole('administrator')) || $isMappingError;
+                            @endphp
+                            @if($canViewInternalError)
+                                <div class="mt-3 p-3.5 rounded-lg bg-white border border-amber-200 text-xs text-slate-700 space-y-1">
+                                    <p class="font-bold text-rose-700 flex items-center gap-1.5">
+                                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        <span>รายละเอียดข้อผิดพลาดทางเทคนิค (Technical Error Detail):</span>
+                                    </p>
+                                    <p class="font-mono text-[11px] bg-slate-50 p-2.5 rounded border border-slate-200 text-slate-800 break-words leading-relaxed select-all">
+                                        {{ $result->errorDetail }}
+                                    </p>
+                                    <p class="text-[11px] text-slate-500 mt-1">
+                                        💡 <strong>คำแนะนำในการแก้ไข:</strong> ตรวจสอบสถานะและข้อมูลของผู้ป่วยในระบบ HIS หรือตรวจสอบการอนุญาตสิทธิ์ Execute ฟังก์ชัน dbo.fGetPatientNameWithTitle / dbo.fGetAHCPatientNationalID ใน SQL Server
+                                    </p>
+                                </div>
+                            @endif
+                        @endif
                     </div>
-                    <a href="{{ route('patients.lookup.index') }}" class="inline-flex items-center justify-center px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-amber-300 text-amber-900 hover:bg-amber-100">
+                    <a href="{{ route('patients.lookup.index') }}" class="inline-flex items-center justify-center px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 shrink-0">
                         ลองใหม่อีกครั้ง
                     </a>
                 </div>

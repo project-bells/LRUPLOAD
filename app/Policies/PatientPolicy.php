@@ -48,7 +48,12 @@ class PatientPolicy
 
     public function delete(User $user, Patient $patient): bool
     {
-        if (! $user->hasPermission('patients.delete')) {
+        $canDelete = $user->hasPermission('patients.delete')
+            || $user->hasRole('administrator')
+            || $user->hasRole('supervisor')
+            || $user->hasRole('author');
+
+        if (! $canDelete) {
             return false;
         }
 

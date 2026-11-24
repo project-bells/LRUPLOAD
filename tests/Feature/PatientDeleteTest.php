@@ -128,15 +128,23 @@ class PatientDeleteTest extends TestCase
         $this->assertModelMissing($patient);
     }
 
-    public function test_author_and_viewer_cannot_delete_patient(): void
+    public function test_author_can_delete_patient_with_zero_documents(): void
     {
         $author = $this->createUserWithRole('author');
-        $viewer = $this->createUserWithRole('viewer');
         $patient = $this->createPatient('66-000103');
 
         $this->actingAs($author)
             ->delete(route('patients.destroy', $patient))
-            ->assertForbidden();
+            ->assertRedirect(route('patients.index'))
+            ->assertSessionHas('status');
+
+        $this->assertModelMissing($patient);
+    }
+
+    public function test_viewer_cannot_delete_patient(): void
+    {
+        $viewer = $this->createUserWithRole('viewer');
+        $patient = $this->createPatient('66-000103b');
 
         $this->actingAs($viewer)
             ->delete(route('patients.destroy', $patient))

@@ -36,8 +36,9 @@
                     <form method="POST" action="{{ route('patients.destroy', $patient) }}" class="inline" onsubmit="return confirm('ยืนยันการลบข้อมูลผู้ป่วย HN {{ $patient->hn }} ออกจากระบบ? (การลบนี้ใช้สำหรับผู้ป่วยที่ไม่มีเอกสารเท่านั้น)');">
                         @csrf
                         @method('DELETE')
-                        <button type="submit" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition cursor-pointer">
-                            ลบข้อมูลผู้ป่วย (0 ฉบับ)
+                        <button type="submit" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-rose-50 border border-rose-300 text-rose-700 hover:bg-rose-100 hover:border-rose-400 transition cursor-pointer inline-flex items-center gap-1.5 shadow-sm">
+                            <svg class="w-4 h-4 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            <span>ลบข้อมูลผู้ป่วย (0 ฉบับ)</span>
                         </button>
                     </form>
                 @endcan
@@ -113,12 +114,25 @@
 
         @if($patient->documents->isEmpty())
             <div class="p-10 text-center text-sm text-slate-500">
-                <p class="font-medium text-slate-700">ยังไม่มีเอกสารสำหรับผู้ป่วยรายนี้</p>
-                @if(auth()->user()->hasPermission('documents.create'))
-                    <a href="{{ route('documents.create', $patient) }}" class="aikchol-btn-primary inline-block mt-3 px-4 py-2 rounded-lg text-xs font-semibold">
-                        + เพิ่มเอกสารฉบับแรก
-                    </a>
-                @endif
+                <p class="font-medium text-slate-700 text-base">ยังไม่มีเอกสารสำหรับผู้ป่วยรายนี้</p>
+                <p class="text-xs text-slate-500 mt-1">สามารถเพิ่มเอกสารใหม่ หรือลบข้อมูลผู้ป่วยนี้ออกจากระบบได้ทันที (เนื่องจากไม่มีเอกสาร)</p>
+                <div class="mt-4 flex flex-wrap items-center justify-center gap-3">
+                    @if(auth()->user()->hasPermission('documents.create'))
+                        <a href="{{ route('documents.create', $patient) }}" class="aikchol-btn-primary inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold shadow-sm">
+                            <span>+ เพิ่มเอกสารฉบับแรก</span>
+                        </a>
+                    @endif
+                    @can('delete', $patient)
+                        <form method="POST" action="{{ route('patients.destroy', $patient) }}" class="inline" onsubmit="return confirm('ยืนยันการลบข้อมูลผู้ป่วย HN {{ $patient->hn }} ออกจากระบบ? (การลบนี้ใช้สำหรับผู้ป่วยที่ไม่มีเอกสารเท่านั้น)');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold bg-rose-50 border border-rose-300 text-rose-700 hover:bg-rose-100 hover:border-rose-400 transition cursor-pointer shadow-sm">
+                                <svg class="w-4 h-4 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                <span>ลบประวัติผู้ป่วยนี้ (ไม่มีเอกสาร)</span>
+                            </button>
+                        </form>
+                    @endcan
+                </div>
             </div>
         @else
             <div class="overflow-x-auto">

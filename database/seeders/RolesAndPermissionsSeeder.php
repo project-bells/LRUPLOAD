@@ -68,6 +68,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'permissions' => [
                     'patients.lookup',
                     'patients.view',
+                    'patients.delete',
                     'documents.view',
                     'documents.preview',
                     'documents.download',

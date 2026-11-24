@@ -45,4 +45,27 @@ class PatientPolicy
     {
         return $user->hasAnyPermission(['documents.create', 'documents.edit_metadata']);
     }
+
+    public function delete(User $user, Patient $patient): bool
+    {
+        if (! $user->hasPermission('patients.delete')) {
+            return false;
+        }
+
+        // Fast-path: if total_documents_count was preloaded and > 0, reject immediately
+        if (isset($patient->total_documents_count) && (int) $patient->total_documents_count > 0) {
+            return false;
+        }
+
+        // Strict guard: patient must strictly have 0 documents (neither active nor soft-deleted documents)
+        if ($patient->documents()->withTrashed()->exists()) {
+            return false;
+        }
+
+        if ($user->hasPermission('audit.view_all') || $user->hasRole('administrator') || $user->department_id === null) {
+            return true;
+        }
+
+        return true;
+    }
 }

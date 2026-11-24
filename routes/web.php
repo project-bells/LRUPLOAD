@@ -60,6 +60,9 @@ Route::middleware(['auth', 'active'])->group(function (): void {
         Route::get('/patients/{patient}', [PatientController::class, 'show'])
             ->middleware('permission:patients.view')
             ->name('patients.show');
+        Route::delete('/patients/{patient}', [PatientController::class, 'destroy'])
+            ->middleware('permission:patients.delete')
+            ->name('patients.destroy');
         Route::get('/patients/{patient}/relationships', [PatientController::class, 'relationships'])
             ->middleware('permission:patients.view')
             ->name('patients.relationships');

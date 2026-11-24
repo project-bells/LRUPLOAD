@@ -32,6 +32,15 @@
                         + เพิ่มเอกสารผู้ป่วย
                     </a>
                 @endif
+                @can('delete', $patient)
+                    <form method="POST" action="{{ route('patients.destroy', $patient) }}" class="inline" onsubmit="return confirm('ยืนยันการลบข้อมูลผู้ป่วย HN {{ $patient->hn }} ออกจากระบบ? (การลบนี้ใช้สำหรับผู้ป่วยที่ไม่มีเอกสารเท่านั้น)');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition cursor-pointer">
+                            ลบข้อมูลผู้ป่วย (0 ฉบับ)
+                        </button>
+                    </form>
+                @endcan
             </div>
         </div>
 

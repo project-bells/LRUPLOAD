@@ -73,6 +73,13 @@
                                     @if(auth()->user()->hasPermission('documents.create'))
                                         <a href="{{ route('documents.create', $patient) }}" class="text-xs font-semibold text-[#1F8E96] hover:underline">+ เพิ่มเอกสาร</a>
                                     @endif
+                                    @can('delete', $patient)
+                                        <form method="POST" action="{{ route('patients.destroy', $patient) }}" class="inline" onsubmit="return confirm('ยืนยันการลบข้อมูลผู้ป่วย HN {{ $patient->hn }} ออกจากระบบ? (การลบนี้ใช้สำหรับผู้ป่วยที่ไม่มีเอกสารเท่านั้น)');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="text-xs font-semibold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer">ลบ</button>
+                                        </form>
+                                    @endcan
                                 </td>
                             </tr>
                         @endforeach

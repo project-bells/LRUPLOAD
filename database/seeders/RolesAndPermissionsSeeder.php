@@ -15,6 +15,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $permissions = [
             ['name' => 'patients.lookup', 'group_name' => 'patients', 'display_name_th' => 'ค้นหา HN ผู้ป่วยจาก HIS'],
             ['name' => 'patients.view', 'group_name' => 'patients', 'display_name_th' => 'ดูข้อมูลผู้ป่วยในระบบ'],
+            ['name' => 'patients.delete', 'group_name' => 'patients', 'display_name_th' => 'ลบข้อมูลผู้ป่วย (กรณีไม่มีเอกสาร)'],
             ['name' => 'documents.view', 'group_name' => 'documents', 'display_name_th' => 'ดูรายการและรายละเอียดเอกสาร'],
             ['name' => 'documents.preview', 'group_name' => 'documents', 'display_name_th' => 'เปิดดูตัวอย่างไฟล์เอกสาร (Preview)'],
             ['name' => 'documents.download', 'group_name' => 'documents', 'display_name_th' => 'ดาวน์โหลดไฟล์เอกสาร'],
@@ -83,6 +84,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'permissions' => [
                     'patients.lookup',
                     'patients.view',
+                    'patients.delete',
                     'documents.view',
                     'documents.preview',
                     'documents.download',

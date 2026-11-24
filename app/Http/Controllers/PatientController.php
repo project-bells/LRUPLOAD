@@ -6,12 +6,14 @@ namespace App\Http\Controllers;
 
 use App\Enums\PatientType;
 use App\Models\Patient;
+use App\Models\PatientRelationship;
 use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\HnSecurityService;
 use App\Services\PatientSnapshotService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class PatientController extends Controller
@@ -32,11 +34,16 @@ class PatientController extends Controller
         $isSystemWide = $user->hasPermission('audit.view_all') || $user->hasRole('administrator') || $user->department_id === null;
 
         $query = Patient::query()
-            ->withCount(['documents' => static function ($q) use ($isSystemWide, $user): void {
-                if (! $isSystemWide) {
-                    $q->where('department_id', $user->department_id);
-                }
-            }])
+            ->withCount([
+                'documents' => static function ($q) use ($isSystemWide, $user): void {
+                    if (! $isSystemWide) {
+                        $q->where('department_id', $user->department_id);
+                    }
+                },
+                'documents as total_documents_count' => static function ($q): void {
+                    $q->withTrashed();
+                },
+            ])
             ->latest('updated_at');
 
         // Scope patients to current department (allow newly selected patients with 0 documents)
@@ -190,5 +197,59 @@ class PatientController extends Controller
 
         return redirect()->route('patients.relationships', $patient)
             ->with('status', 'บันทึกความสัมพันธ์มารดาและทารกพร้อมผู้ยืนยันเรียบร้อยแล้ว');
+    }
+
+    /**
+     * DELETE /patients/{patient} — ลบข้อมูลผู้ป่วย (Snapshot ใน MySQL) ออกจากระบบ
+     * เงื่อนไขเข้มงวด: ต้องไม่มีเอกสารจัดเก็บอยู่ในระบบ (ทั้งเอกสารปกติและในถังขยะ 0 ฉบับ)
+     */
+    public function destroy(Request $request, Patient $patient): RedirectResponse
+    {
+        $this->authorize('delete', $patient);
+
+        // Strict guard: patient must strictly have 0 documents (including soft-deleted)
+        if ($patient->documents()->withTrashed()->exists()) {
+            return back()->withErrors([
+                'error' => 'ไม่สามารถลบข้อมูลผู้ป่วยได้ เนื่องจากมีเอกสารจัดเก็บอยู่ในระบบ (ต้องไม่มีเอกสารเท่านั้น 0 ฉบับ)',
+            ]);
+        }
+
+        /** @var User $user */
+        $user = $request->user();
+        $hn = $patient->hn;
+        $hnHash = $patient->hn_hash;
+        $patientId = $patient->id;
+        $patientType = $patient->patient_type?->value ?? (string) $patient->patient_type;
+
+        DB::transaction(function () use ($patient, $user, $hnHash, $patientId, $patientType, $request): void {
+            // Remove any relationships where this patient is mother or child
+            PatientRelationship::query()
+                ->where('mother_patient_id', $patientId)
+                ->orWhere('child_patient_id', $patientId)
+                ->delete();
+
+            // Clear any lingering document links (if any)
+            $patient->documentLinks()->delete();
+
+            $this->auditLog->record(
+                action: 'delete_patient',
+                user: $user,
+                outcome: 'success',
+                hnHash: $hnHash,
+                beforeData: [
+                    'patient_id' => $patientId,
+                    'patient_type' => $patientType,
+                ],
+                afterData: [
+                    'reason' => 'zero_documents_cleanup',
+                ],
+                request: $request,
+            );
+
+            $patient->delete();
+        });
+
+        return redirect()->route('patients.index')
+            ->with('status', "ลบข้อมูลผู้ป่วย HN {$hn} ออกจากระบบเรียบร้อยแล้ว (ไม่มีเอกสารคงค้าง)");
     }
 }

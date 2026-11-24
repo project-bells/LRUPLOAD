@@ -19,19 +19,29 @@ class DatabaseSeeder extends Seeder
             InitialDataSeeder::class,
         ]);
 
-        // Seed default development accounts only outside production
-        if (! app()->environment('production')) {
-            $lrDepartment = Department::query()->where('code', 'LR')->first();
+        $lrDepartment = Department::query()->where('code', 'LR')->first();
 
+        // Always ensure at least one initial administrator account exists
+        $adminUser = User::query()->where('username', 'admin')->first();
+        if ($adminUser === null) {
+            $adminUser = User::query()->create([
+                'department_id' => $lrDepartment?->id,
+                'employee_code' => 'AK-ADMIN-001',
+                'username' => 'admin',
+                'name' => 'ผู้ดูแลระบบ โรงพยาบาลเอกชล',
+                'email' => 'admin@aikchol.local',
+                'password' => Hash::make('Admin@Aikchol2026!'),
+                'is_active' => true,
+            ]);
+            $adminRole = Role::query()->where('name', 'administrator')->first();
+            if ($adminRole !== null) {
+                $adminUser->roles()->sync([$adminRole->id]);
+            }
+        }
+
+        // Seed additional demo accounts in non-production environments
+        if (! app()->environment('production')) {
             $demoUsers = [
-                [
-                    'username' => 'admin',
-                    'employee_code' => 'AK-ADMIN-001',
-                    'name' => 'ผู้ดูแลระบบ โรงพยาบาลเอกชล',
-                    'email' => 'admin@aikchol.local',
-                    'password' => 'Admin@Aikchol2026!',
-                    'role' => 'administrator',
-                ],
                 [
                     'username' => 'supervisor',
                     'employee_code' => 'AK-LR-SUP01',

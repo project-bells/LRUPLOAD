@@ -1,0 +1,15 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Prevent direct access to hidden files and sensitive project files
+    <FilesMatch "^\.|\.(env|json|lock|xml|yml|yaml|md|cache)$">
+        Require all denied
+    </FilesMatch>
+
+    # Deny access to internal directories if accessed directly via URL
+    RewriteRule ^(app|bootstrap|config|database|resources|routes|storage|tests|vendor)(/.*)?$ - [F,L]
+
+    # Automatically redirect or rewrite requests to public/ if document root is set to project root
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
